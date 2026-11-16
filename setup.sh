@@ -44,7 +44,13 @@ EOF
 chmod +x "$BRIDGE_HOME/duckdns-update.sh"
 # Nao falhar o setup se o DuckDNS estiver fora do ar por um instante (o cron tenta de novo em 5 min).
 "$BRIDGE_HOME/duckdns-update.sh" || echo "aviso: atualizacao DuckDNS falhou agora; o cron tenta de novo em 5 min"
-( crontab -l 2>/dev/null | grep -v duckdns-update.sh; echo "*/5 * * * * $BRIDGE_HOME/duckdns-update.sh" ) | crontab -
+# Com crontab vazio, `grep -v` nao casa nenhuma linha e sai 1 — sem o `|| true`,
+# o `set -euo pipefail` mataria o script aqui (foi o que travou as 2 tentativas).
+TMP_CRONTAB=$(mktemp)
+crontab -l 2>/dev/null | grep -v duckdns-update.sh > "$TMP_CRONTAB" || true
+echo "*/5 * * * * $BRIDGE_HOME/duckdns-update.sh" >> "$TMP_CRONTAB"
+crontab "$TMP_CRONTAB"
+rm -f "$TMP_CRONTAB"
 
 echo "== firewall da VM (libera 80/443) =="
 # A imagem Ubuntu da Oracle vem com iptables rejeitando tudo, menos SSH (22).
