@@ -15,7 +15,7 @@ cd "$BRIDGE_HOME"
 
 echo "== pacotes =="
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv git curl caddy >/dev/null
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv git curl caddy cron >/dev/null
 
 echo "== tokens e diretorios =="
 printf '%s' "$MCP_TOKEN" > "$BRIDGE_HOME/.token"
@@ -42,8 +42,29 @@ set -a; . /opt/muse-bridge/duckdns.conf; set +a
 curl -fsS "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" >/dev/null
 EOF
 chmod +x "$BRIDGE_HOME/duckdns-update.sh"
-"$BRIDGE_HOME/duckdns-update.sh"
+# Nao falhar o setup se o DuckDNS estiver fora do ar por um instante (o cron tenta de novo em 5 min).
+"$BRIDGE_HOME/duckdns-update.sh" || echo "aviso: atualizacao DuckDNS falhou agora; o cron tenta de novo em 5 min"
 ( crontab -l 2>/dev/null | grep -v duckdns-update.sh; echo "*/5 * * * * $BRIDGE_HOME/duckdns-update.sh" ) | crontab -
+
+echo "== firewall da VM (libera 80/443) =="
+# A imagem Ubuntu da Oracle vem com iptables rejeitando tudo, menos SSH (22).
+# Libera 80/443 agora e garante que sobrevivem a reboot (servico oneshot).
+for PORT in 80 443; do
+  iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT
+done
+cat > /etc/systemd/system/bridge-firewall.service <<'EOF'
+[Unit]
+Description=Libera 80/443 no iptables (ponte Muse-Claude)
+After=network.target
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for p in 80 443; do iptables -C INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport $p -j ACCEPT; done'
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable bridge-firewall.service
 
 echo "== Caddy (HTTPS automatico) =="
 DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
