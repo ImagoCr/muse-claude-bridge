@@ -56,9 +56,16 @@ systemctl enable caddy
 systemctl restart caddy
 
 echo "== status =="
-sleep 2
-systemctl is-active muse-bridge.service
-systemctl is-active caddy
-curl -fsS "http://127.0.0.1:8765/health" || true
+# Aguarda a ponte responder (o Python demora alguns segundos para subir em 1 OCPU).
+# Nunca falhar o script aqui: os servicos ja foram iniciados acima.
+for i in 1 2 3 4 5 6; do
+  sleep 5
+  if curl -fsS "http://127.0.0.1:8765/health" >/dev/null 2>&1; then
+    echo "ponte respondendo (tentativa $i)"
+    break
+  fi
+done
+systemctl is-active muse-bridge.service || true
+systemctl is-active caddy || true
 echo
 echo "Ponte instalada. URL do MCP: https://${DOMAIN}/mcp/t/<MCP_TOKEN>/"
