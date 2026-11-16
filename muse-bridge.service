@@ -1,0 +1,15 @@
+[Unit]
+Description=Ponte Muse <-> Claude (servidor MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/muse-bridge
+Environment=MUSE_BRIDGE_HOME=/opt/muse-bridge
+ExecStart=/opt/muse-bridge/venv/bin/python /opt/muse-bridge/server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
